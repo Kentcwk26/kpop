@@ -51,6 +51,82 @@ class ChatInfoWidget extends StatelessWidget {
   }
 }
 
+class IconText extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color? iconColor;
+  final Color? textColor;
+  final double? iconSize;
+  final double? fontSize;
+  final FontWeight? fontWeight;
+  final TextAlign? textAlign;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final MainAxisAlignment mainAxisAlignment;
+  final CrossAxisAlignment crossAxisAlignment;
+  final bool showIcon;
+  final int? maxLines;
+  final TextOverflow? overflow;
+
+  const IconText({
+    super.key,
+    required this.icon,
+    required this.text,
+    this.iconColor,
+    this.textColor,
+    this.iconSize,
+    this.fontSize,
+    this.fontWeight,
+    this.textAlign,
+    this.padding,
+    this.margin,
+    this.mainAxisAlignment = MainAxisAlignment.start,
+    this.crossAxisAlignment = CrossAxisAlignment.center,
+    this.showIcon = true,
+    this.maxLines,
+    this.overflow,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: margin,
+      padding: padding ?? const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: mainAxisAlignment,
+        crossAxisAlignment: crossAxisAlignment,
+        mainAxisSize: MainAxisSize.min,
+        spacing: 8.0,
+        children: [
+          if (showIcon) ...[
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: 10),
+              child: Icon(
+                icon,
+                color: iconColor ?? Theme.of(context).colorScheme.onSurface,
+                size: iconSize ?? 12,
+              ),
+            )
+          ],
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: textColor ?? Theme.of(context).colorScheme.onSurface,
+                fontSize: fontSize ?? 14,
+                fontWeight: fontWeight ?? FontWeight.normal,
+              ),
+              textAlign: textAlign,
+              maxLines: maxLines,
+              overflow: overflow,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class IconTextWidget extends StatelessWidget {
   final IconData icon;
   final String text;

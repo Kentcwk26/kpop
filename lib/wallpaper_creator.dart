@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
 
 import '../utils/snackbar_helper.dart';
+import 'utils/color_buttons.dart';
 
 final wallpaperProvider = StateNotifierProvider<WallpaperViewModel, WallpaperState>(
   (ref) => WallpaperViewModel(),
@@ -148,7 +149,14 @@ class WallpaperCreator extends ConsumerWidget {
     final vm = ref.read(wallpaperProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Wallpaper Creator')),
+      appBar: AppBar(
+        title: const Text('Wallpaper Creator'),
+        actions: [
+          IconButton(
+            onPressed: () => Navigator.pushNamed(context, '/creation-help'),
+            icon: const Icon(Icons.help_outline))
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: SafeArea(
@@ -169,14 +177,14 @@ class WallpaperCreator extends ConsumerWidget {
               if (state.imageFile != null)
                 SizedBox(
                   width: double.infinity,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('Delete'),
+                  child: ElevatedButtonVariants.danger(
                     onPressed: state.exporting
                         ? null
                         : () {
                             vm.clearImage();
                           },
+                    child: const Text('Delete'),
+                    icon: Icons.delete_outline,
                   ),
                 ),
 

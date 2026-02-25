@@ -6,7 +6,7 @@ class ElevatedButtonVariants {
       backgroundColor: WidgetStateProperty.all(background),
       foregroundColor: WidgetStateProperty.all(foreground),
       overlayColor: WidgetStateProperty.all(background.withOpacity(0.9)),
-      padding: WidgetStateProperty.all(const EdgeInsets.all(20)),
+      padding: WidgetStateProperty.all(const EdgeInsets.all(12)),
     );
   }
 

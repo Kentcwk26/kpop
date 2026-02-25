@@ -11,6 +11,7 @@ import 'package:kpop/404.dart';
 import 'package:kpop/adminstrator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'about.dart';
+import 'creation_help.dart';
 import 'home.dart';
 import 'login.dart';
 import 'notification.dart';
@@ -111,7 +112,7 @@ class MyApp extends ConsumerWidget {
         '/home': (context) => const HomeScreen(),
         '/about': (context) => const AboutScreen(),
         '/privacy-policy': (context) => const PrivacyPolicyScreen(),
-        '/terms-and-conditions': (context) => const TermsOfServiceScreen(),
+        '/creation-help': (context) => const CreationHelpScreen(),
       },
       onUnknownRoute: (settings) {
         return MaterialPageRoute(

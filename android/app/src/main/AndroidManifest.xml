@@ -45,7 +45,7 @@
         </receiver>
 
         <receiver
-            android:name=".ClockWidgetProvider"
+            android:name=".ClockHomeWidget"
             android:label="Clock Widget"
             android:exported="false">
             <intent-filter>
