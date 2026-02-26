@@ -1,9 +1,10 @@
 package com.example.kpop
 
+import android.app.PendingIntent
+import android.content.Intent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Handler
 import android.os.Looper
@@ -45,42 +46,63 @@ class ClockHomeWidget : AppWidgetProvider() {
 
         runnable = object : Runnable {
             override fun run() {
+
                 val prefs = HomeWidgetPlugin.getData(context)
+
                 val sdfTime = SimpleDateFormat("hh:mm:ss a", Locale.getDefault())
                 val sdfDate = SimpleDateFormat("dd/MM/yyyy (EEEE)", Locale.getDefault())
 
                 for (appWidgetId in appWidgetIds) {
+
+                    // Save widget ID for Flutter
+                    prefs.edit().putInt("widgetId", appWidgetId).apply()
+
                     val views = RemoteViews(context.packageName, R.layout.clock_widget)
 
-                    // Update date & time
-                    views.setTextViewText(R.id.clockTimeText, sdfTime.format(Date()).uppercase())
-                    views.setTextViewText(R.id.clockDateText, sdfDate.format(Date()))
+                    // Update time/date
+                    views.setTextViewText(
+                        R.id.clockTimeText,
+                        sdfTime.format(Date()).uppercase()
+                    )
+                    views.setTextViewText(
+                        R.id.clockDateText,
+                        sdfDate.format(Date())
+                    )
 
-                    // --- UPDATED: Load latest exported image using pending_k_widget_id ---
-                    val pendingId = prefs.getString("pending_k_widget_id", null)
-                    val imagePath = pendingId?.let { prefs.getString("clock_image_$it", null) }
-
-                    Log.d(TAG, "widgetId=$appWidgetId pendingId=$pendingId imagePath=$imagePath")
+                    // Load image safely
+                    val imagePath = prefs.getString("clock_image_$appWidgetId", null)
+                    Log.d(TAG, "widgetId=$appWidgetId imagePath=$imagePath")
 
                     if (!imagePath.isNullOrEmpty()) {
-                        val imgFile = File(imagePath)
-                        if (imgFile.exists()) {
-                            val bitmap = BitmapFactory.decodeFile(imgFile.absolutePath)
-                            if (bitmap != null) {
-                                val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 200, 200, true)
-                                views.setImageViewBitmap(R.id.clockImage, scaledBitmap)
-                            } else {
-                                Log.w(TAG, "Failed to decode bitmap from $imagePath")
-                                views.setImageViewResource(R.id.clockImage, R.drawable.ic_placeholder)
-                            }
+                        val file = File(imagePath)
+                        if (file.exists()) {
+                            val bitmap = decodeSampledBitmap(file.absolutePath, 600, 600)
+                            views.setImageViewBitmap(R.id.clockImage, bitmap)
                         } else {
-                            Log.w(TAG, "Image file does not exist: $imagePath")
-                            views.setImageViewResource(R.id.clockImage, R.drawable.ic_placeholder)
+                            views.setImageViewResource(
+                                R.id.clockImage,
+                                R.drawable.ic_placeholder
+                            )
                         }
                     } else {
-                        Log.d(TAG, "No imagePath for widgetId=$appWidgetId")
-                        views.setImageViewResource(R.id.clockImage, R.drawable.ic_placeholder)
+                        views.setImageViewResource(
+                            R.id.clockImage,
+                            R.drawable.ic_placeholder
+                        )
                     }
+
+                    // Open app when widget tapped
+                    val intent = Intent(context, MainActivity::class.java)
+                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+
+                    val pendingIntent = PendingIntent.getActivity(
+                        context,
+                        appWidgetId,
+                        intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+
+                    views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
 
                     appWidgetManager.updateAppWidget(appWidgetId, views)
                 }
@@ -90,5 +112,38 @@ class ClockHomeWidget : AppWidgetProvider() {
         }
 
         handler.post(runnable!!)
+    }
+
+    // -------------------------------
+    // Helper: Scale large images safely
+    // -------------------------------
+    private fun decodeSampledBitmap(path: String, reqWidth: Int, reqHeight: Int) =
+        BitmapFactory.decodeFile(path, BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+            BitmapFactory.decodeFile(path, this)
+
+            inSampleSize = calculateInSampleSize(this, reqWidth, reqHeight)
+            inJustDecodeBounds = false
+        })
+
+    private fun calculateInSampleSize(
+        options: BitmapFactory.Options,
+        reqWidth: Int,
+        reqHeight: Int
+    ): Int {
+        val (height: Int, width: Int) = options.outHeight to options.outWidth
+        var inSampleSize = 1
+
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight: Int = height / 2
+            val halfWidth: Int = width / 2
+
+            while ((halfHeight / inSampleSize) >= reqHeight &&
+                (halfWidth / inSampleSize) >= reqWidth
+            ) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
     }
 }

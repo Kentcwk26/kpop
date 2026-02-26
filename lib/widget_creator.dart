@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:home_widget/home_widget.dart';
@@ -97,52 +98,40 @@ class WidgetCreatorScreen extends StateNotifier<WidgetCreatorState> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      String widgetId;
-      DocumentReference? widgetDoc;
+      // 🔥 1️⃣ Get REAL Android widget ID FIRST
+      final int? androidWidgetId = await HomeWidget.getWidgetData<int>('widgetId');
 
-      if (type == KWidgetType.clock) {
-        // Create dynamic clock ID (like note)
-        widgetDoc = FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('widgets')
-            .doc();
-
-        widgetId = widgetDoc.id;
-
-        await widgetDoc.set({
-          'id': widgetId,
-          'userId': user.uid,
-          'type': type.name,
-          'name': 'Clock Widget',
-          'style': _resolveStyle(type),
-          'data': _resolveData(type),
-          'createdAt': DateTime.now().toIso8601String(),
-        });
-      } else {
-        // Note widgets: dynamic IDs
-        widgetDoc = FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('widgets')
-            .doc();
-        widgetId = widgetDoc.id;
-
-        await widgetDoc.set({
-          'id': widgetId,
-          'userId': user.uid,
-          'type': type.name,
-          'name': '${type.name} widget',
-          'style': _resolveStyle(type),
-          'data': _resolveData(type),
-          'createdAt': DateTime.now().toIso8601String(),
-        });
+      if (androidWidgetId == null) {
+        print('❌ No Android widgetId found');
+        SnackBarHelper.showError(context, 'Please add widget to home screen first.');
+        return;
       }
 
-      // Capture screenshot
-      final Uint8List? bytes = await screenshotController.capture(
-        pixelRatio: 2.5,
-      );
+      print('✅ Using Android widgetId: $androidWidgetId');
+
+      final String widgetId = androidWidgetId.toString();
+
+      // 🔥 2️⃣ Save to Firestore using ANDROID ID
+      final widgetDoc = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('widgets')
+          .doc(widgetId);
+
+      await widgetDoc.set({
+        'id': widgetId,
+        'androidWidgetId': androidWidgetId,
+        'userId': user.uid,
+        'type': type.name,
+        'name': '${type.name} widget',
+        'style': _resolveStyle(type),
+        'data': _resolveData(type),
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+
+      // 🔥 3️⃣ Capture screenshot
+      final Uint8List? bytes = await screenshotController.capture(pixelRatio: 1.2);
+
       if (bytes == null) {
         SnackBarHelper.showError(context, 'Failed to capture widget');
         return;
@@ -151,25 +140,39 @@ class WidgetCreatorScreen extends StateNotifier<WidgetCreatorState> {
       final dir = await getExternalStorageDirectory();
       if (dir == null) return;
 
-      final file = File('${dir.path}/${widgetId}.png');
+      // 🔥 4️⃣ Save image using ANDROID ID filename
+      final file = File('${dir.path}/$widgetId.png');
       await file.writeAsBytes(bytes);
 
-      // Save HomeWidget data
+      // 🔥 5️⃣ Save HomeWidget data using ANDROID ID
       if (type == KWidgetType.clock) {
-        await HomeWidget.saveWidgetData('clock_image_$widgetId', file.path);
-        await HomeWidget.saveWidgetData('widget_mapping_$widgetId', widgetId);
-        await HomeWidget.saveWidgetData('pending_k_widget_id', widgetId);
+        await HomeWidget.saveWidgetData(
+          'clock_image_$androidWidgetId',
+          file.path,
+        );
       } else if (type == KWidgetType.note) {
-        await HomeWidget.saveWidgetData('note_image_$widgetId', file.path);
-        await HomeWidget.saveWidgetData('note_text_$widgetId', state.noteText);
-        await HomeWidget.saveWidgetData('widget_mapping_$widgetId', widgetId);
+        await HomeWidget.saveWidgetData(
+          'note_image_$androidWidgetId',
+          file.path,
+        );
+
+        await HomeWidget.saveWidgetData(
+          'note_text_$androidWidgetId',
+          state.noteText,
+        );
       }
 
-      print(
-        'Saving ${type.name} widget: widgetId=$widgetId, imagePath=${file.path}',
+      // 🔥 6️⃣ THEN trigger widget update
+      await HomeWidget.updateWidget(
+        name: _androidWidgetName(type),
+        androidName: _androidWidgetName(type),
       );
 
-      // Trigger widget update
+      print(
+        'Saving ${type.name} widget: androidWidgetId=$androidWidgetId, imagePath=${file.path}',
+      );
+
+      // 🔥 6️⃣ Trigger widget update
       await HomeWidget.updateWidget(
         name: _androidWidgetName(type),
         androidName: _androidWidgetName(type),
@@ -257,24 +260,24 @@ class WidgetCreator extends ConsumerWidget {
 
               Column(
                 children: [
-                  GestureDetector(
-                    onTap: () => creator.pickImage(),
-                    child: Screenshot(
-                      controller: creator.screenshotController,
-                      child: Container(
-                        width: double.infinity,
-                        height: 300,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey.shade400),
-                          image: DecorationImage(
-                            image: state.imageFile != null
-                                ? FileImage(state.imageFile!)
-                                : const AssetImage(
-                                        'assets/images/empty_pic.jpg',
-                                      )
-                                      as ImageProvider,
-                            fit: BoxFit.cover,
+                  AspectRatio(
+                    aspectRatio: 1,
+                    child: GestureDetector(
+                      onTap: () => creator.pickImage(),
+                      child: Screenshot(
+                        controller: creator.screenshotController,
+                        child: Container(
+                          width: double.infinity,
+                          height: MediaQuery.of(context).size.height * 0.35,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey.shade400),
+                            image: DecorationImage(
+                              image: state.imageFile != null
+                                  ? FileImage(state.imageFile!)
+                                  : const AssetImage('assets/images/empty_pic.jpg') as ImageProvider,
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         ),
                       ),

@@ -1,55 +1,24 @@
 package com.example.kpop
 
-import android.appwidget.AppWidgetManager
-import android.appwidget.AppWidgetProvider
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProvider
+import android.graphics.BitmapFactory
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.widget.RemoteViews
-import androidx.core.content.FileProvider
 import es.antonborri.home_widget.HomeWidgetPlugin
 import java.io.File
 
 class NoteHomeWidget : AppWidgetProvider() {
 
     companion object {
-        fun updateNoteWidget(context: Context, widgetId: Int, text: String?, imageFileName: String?) {
-            val prefs = HomeWidgetPlugin.getData(context)
-            prefs.edit().apply {
-                if (text != null) putString("note_text_$widgetId", text)
-                if (imageFileName != null) putString("note_image_$widgetId", imageFileName)
-            }.apply()
-
-            val views = RemoteViews(context.packageName, R.layout.widget_note)
-            views.setTextViewText(R.id.noteText, text ?: "Empty note")
-
-            if (imageFileName != null) {
-                val file = File(context.filesDir, imageFileName)
-                if (file.exists()) {
-                    val uri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
-                    views.setImageViewUri(R.id.noteImage, uri)
-
-                    val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                        addCategory(Intent.CATEGORY_HOME)
-                    }
-                    val resolveInfos = context.packageManager.queryIntentActivities(homeIntent, 0)
-                    resolveInfos.forEach { resolveInfo ->
-                        context.grantUriPermission(
-                            resolveInfo.activityInfo.packageName,
-                            uri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION
-                        )
-                    }
-                }
-            }
-
-            val manager = AppWidgetManager.getInstance(context)
-            manager.updateAppWidget(widgetId, views)
-        }
+        private val handler = Handler(Looper.getMainLooper())
+        private var runnable: Runnable? = null
+        private const val TAG = "NoteWidget"
     }
 
     override fun onUpdate(
@@ -57,45 +26,107 @@ class NoteHomeWidget : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        val prefs = HomeWidgetPlugin.getData(context)
+        startUpdating(context, appWidgetManager, appWidgetIds)
+    }
 
-        for (widgetId in appWidgetIds) {
+    override fun onDisabled(context: Context) {
+        runnable?.let { handler.removeCallbacks(it) }
+        runnable = null
+    }
 
-            prefs.edit()
-                .putInt("current_widget_id", widgetId)
-                .apply()
+    private fun startUpdating(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetIds: IntArray
+    ) {
+        runnable?.let { handler.removeCallbacks(it) }
 
-            val views = RemoteViews(context.packageName, R.layout.widget_note)
-            val text = prefs.getString("note_text_$widgetId", "Empty note") ?: "Empty note"
-            views.setTextViewText(R.id.noteText, text)
+        runnable = object : Runnable {
+            override fun run() {
 
-            val imageFileName = prefs.getString("note_image_$widgetId", null)
+                val prefs = HomeWidgetPlugin.getData(context)
 
-            if (imageFileName != null) {
-                val file = File(context.filesDir, imageFileName)
-                if (file.exists()) {
-                    val uri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
-                    views.setImageViewUri(R.id.noteImage, uri)
+                for (appWidgetId in appWidgetIds) {
 
-                    val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                        addCategory(Intent.CATEGORY_HOME)
-                    }
-                    val resolveInfos = context.packageManager.queryIntentActivities(homeIntent, 0)
-                    resolveInfos.forEach { resolveInfo ->
-                        context.grantUriPermission(
-                            resolveInfo.activityInfo.packageName,
-                            uri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    // Save widget ID for Flutter
+                    prefs.edit().putInt("noteWidgetId", appWidgetId).apply()
+
+                    val views = RemoteViews(context.packageName, R.layout.widget_note)
+
+                    val imagePath = prefs.getString("note_image_$appWidgetId", null)
+                    Log.d(TAG, "widgetId=$appWidgetId imagePath=$imagePath")
+
+                    if (!imagePath.isNullOrEmpty()) {
+                        val file = File(imagePath)
+                        if (file.exists()) {
+                            val bitmap = decodeSampledBitmap(file.absolutePath, 600, 600)
+                            views.setImageViewBitmap(R.id.noteImage, bitmap)
+                        } else {
+                            views.setImageViewResource(
+                                R.id.noteImage,
+                                R.drawable.ic_placeholder
+                            )
+                        }
+                    } else {
+                        views.setImageViewResource(
+                            R.id.noteImage,
+                            R.drawable.ic_placeholder
                         )
                     }
-                }
-            }
 
-            appWidgetManager.updateAppWidget(widgetId, views)
+                    // Open app when widget tapped
+                    val intent = Intent(context, MainActivity::class.java)
+                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+
+                    val pendingIntent = PendingIntent.getActivity(
+                        context,
+                        appWidgetId,
+                        intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+
+                    views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+
+                    appWidgetManager.updateAppWidget(appWidgetId, views)
+                }
+
+                handler.postDelayed(this, 1000)
+            }
         }
+
+        handler.post(runnable!!)
+    }
+
+    // -------------------------------
+    // Helper: Scale large images safely
+    // -------------------------------
+    private fun decodeSampledBitmap(path: String, reqWidth: Int, reqHeight: Int) =
+        BitmapFactory.decodeFile(path, BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+            BitmapFactory.decodeFile(path, this)
+
+            inSampleSize = calculateInSampleSize(this, reqWidth, reqHeight)
+            inJustDecodeBounds = false
+        })
+
+    private fun calculateInSampleSize(
+        options: BitmapFactory.Options,
+        reqWidth: Int,
+        reqHeight: Int
+    ): Int {
+        val (height: Int, width: Int) = options.outHeight to options.outWidth
+        var inSampleSize = 1
+
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight: Int = height / 2
+            val halfWidth: Int = width / 2
+
+            while ((halfHeight / inSampleSize) >= reqHeight &&
+                (halfWidth / inSampleSize) >= reqWidth
+            ) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
     }
 }
